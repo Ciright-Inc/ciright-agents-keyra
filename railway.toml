@@ -7,9 +7,10 @@ builder = "DOCKERFILE"
 dockerfilePath = "Dockerfile"
 
 [deploy]
-# Schema + seed run at start (build has no DB access; avoids P1012 on SQLite vs Postgres URL).
-startCommand = "/bin/sh -c \"npm run deploy:db && exec npm run start\""
-healthcheckPath = "/"
+# Schema + seed run at start (build has no DB access). deploy:db is non-fatal
+# so the app always boots and /api/health responds even if seeding errors.
+startCommand = "sh scripts/railway-start.sh"
+healthcheckPath = "/api/health"
 healthcheckTimeout = 300
 restartPolicyType = "ON_FAILURE"
 restartPolicyMaxRetries = 10
