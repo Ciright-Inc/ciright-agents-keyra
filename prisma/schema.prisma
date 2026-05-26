@@ -1,0 +1,201 @@
+// ciright.agents.keyra.ie — internal deployment catalog
+// Stores clean agent designs only. No customer transactional data.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+// -----------------------------------------------------------------------------
+// keyra_agent_catalog
+// Clean design blueprints. Each row is a deployable agent shell.
+// -----------------------------------------------------------------------------
+model KeyraAgentCatalog {
+  keyra_agent_id            String   @id @default(cuid())
+
+  // Parent lineage (manually populated after export from Ciright Core)
+  ciright_parent_agent_id   String?
+  ciright_core_key          String?
+
+  agent_name                String
+  agent_slug                String   @unique
+  agent_category            String
+  agent_industry            String
+  agent_function            String
+  agent_type                String
+  agent_description         String
+
+  // JSON-encoded arrays (SQLite has no native JSON for filter usage)
+  agent_capabilities        String   @default("[]")
+  required_inputs           String   @default("[]")
+  expected_outputs          String   @default("[]")
+  required_permissions      String   @default("[]")
+  required_integrations     String   @default("[]")
+
+  knowledge_pack_required   Boolean  @default(false)
+  human_approval_required   Boolean  @default(false)
+
+  security_classification   String   @default("Internal")    // Public | Internal | Restricted | Sovereign
+  regulatory_classification String   @default("None")        // None | KYC | AML | GDPR | HIPAA | PSD2 | Sovereign
+
+  deployment_status         String   @default("Draft")       // Draft | In Review | Approved | Published | Retired
+  subscription_ready        Boolean  @default(false)
+
+  version                   String   @default("0.1.0")
+  created_by                String   @default("ciright.system")
+  approved_by               String?
+  created_at                DateTime @default(now())
+  updated_at                DateTime @updatedAt
+
+  // JSON-encoded list of ISO country codes ("ALL" allowed)
+  country_applicability     String   @default("[\"ALL\"]")
+
+  audit_events              AuditEvent[]
+  approvals                 ApprovalRequest[]
+  knowledge_packs           KnowledgePackBinding[]
+  integrations              IntegrationBinding[]
+  exports                   ExportRecord[]
+}
+
+// -----------------------------------------------------------------------------
+// Reference data
+// -----------------------------------------------------------------------------
+model Industry {
+  id          String   @id @default(cuid())
+  name        String   @unique
+  slug        String   @unique
+  description String?
+  sort_order  Int      @default(0)
+}
+
+model AgentFunction {
+  id          String   @id @default(cuid())
+  name        String   @unique
+  slug        String   @unique
+  description String?
+}
+
+model AgentType {
+  id          String   @id @default(cuid())
+  name        String   @unique
+  slug        String   @unique
+  description String?
+}
+
+model Country {
+  id          String   @id @default(cuid())
+  iso_code    String   @unique
+  name        String
+  region      String
+}
+
+// -----------------------------------------------------------------------------
+// Knowledge packs
+// Templates only — never customer-private knowledge unless explicitly approved.
+// -----------------------------------------------------------------------------
+model KnowledgePack {
+  id              String   @id @default(cuid())
+  name            String
+  slug            String   @unique
+  scope           String   // industry | function | regulatory | universal
+  classification  String   @default("Template") // Template | Reference | Reserved
+  description     String?
+  created_at      DateTime @default(now())
+
+  bindings        KnowledgePackBinding[]
+}
+
+model KnowledgePackBinding {
+  id                 String              @id @default(cuid())
+  agent_id           String
+  pack_id            String
+  required           Boolean             @default(true)
+  agent              KeyraAgentCatalog   @relation(fields: [agent_id], references: [keyra_agent_id], onDelete: Cascade)
+  pack               KnowledgePack       @relation(fields: [pack_id], references: [id], onDelete: Cascade)
+
+  @@unique([agent_id, pack_id])
+}
+
+// -----------------------------------------------------------------------------
+// Integrations
+// -----------------------------------------------------------------------------
+model Integration {
+  id            String   @id @default(cuid())
+  name          String
+  slug          String   @unique
+  category      String   // telecom | banking | gov | crm | identity | misc
+  vendor        String?
+  description   String?
+  created_at    DateTime @default(now())
+
+  bindings      IntegrationBinding[]
+}
+
+model IntegrationBinding {
+  id              String              @id @default(cuid())
+  agent_id        String
+  integration_id  String
+  required        Boolean             @default(true)
+  agent           KeyraAgentCatalog   @relation(fields: [agent_id], references: [keyra_agent_id], onDelete: Cascade)
+  integration     Integration         @relation(fields: [integration_id], references: [id], onDelete: Cascade)
+
+  @@unique([agent_id, integration_id])
+}
+
+// -----------------------------------------------------------------------------
+// Approval queue
+// -----------------------------------------------------------------------------
+model ApprovalRequest {
+  id              String              @id @default(cuid())
+  agent_id        String
+  requested_by    String
+  reason          String?
+  status          String              @default("Pending") // Pending | Approved | Rejected
+  decided_by      String?
+  decided_at      DateTime?
+  created_at      DateTime            @default(now())
+  agent           KeyraAgentCatalog   @relation(fields: [agent_id], references: [keyra_agent_id], onDelete: Cascade)
+}
+
+// -----------------------------------------------------------------------------
+// Export center — Ciright Core mapping handoff
+// -----------------------------------------------------------------------------
+model ExportRecord {
+  id              String              @id @default(cuid())
+  agent_id        String
+  export_batch    String
+  export_format   String              @default("CSV") // CSV | JSON
+  exported_by     String
+  exported_at     DateTime            @default(now())
+  mapped          Boolean             @default(false)
+  mapped_at       DateTime?
+  agent           KeyraAgentCatalog   @relation(fields: [agent_id], references: [keyra_agent_id], onDelete: Cascade)
+}
+
+// -----------------------------------------------------------------------------
+// Audit log
+// -----------------------------------------------------------------------------
+model AuditEvent {
+  id          String              @id @default(cuid())
+  agent_id    String?
+  actor       String
+  event_type  String
+  detail      String?
+  created_at  DateTime            @default(now())
+  agent       KeyraAgentCatalog?  @relation(fields: [agent_id], references: [keyra_agent_id], onDelete: Cascade)
+}
+
+// -----------------------------------------------------------------------------
+// Admin operators
+// -----------------------------------------------------------------------------
+model AdminUser {
+  id          String   @id @default(cuid())
+  email       String   @unique
+  name        String
+  role        String   @default("operator") // operator | reviewer | admin | sovereign-admin
+  created_at  DateTime @default(now())
+}
