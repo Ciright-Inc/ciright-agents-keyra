@@ -4,6 +4,9 @@ import {
   type KeyraSessionUser,
 } from "@/lib/keyraSessionCookie";
 
+/** SimSecure auth cookie — only present after Get Started on the auth domain. */
+const SIMSECURE_SESSION_COOKIE = "simsecure_session";
+
 type AuthSessionPayload = {
   authenticated?: boolean;
   user?: {
@@ -72,6 +75,14 @@ async function resolveKeyraSessionFromCookieHeader(
   const keyraRaw = readCookie(cookieHeader, KEYRA_SESSION_COOKIE);
   const cookieUser = keyraRaw ? parseSession(keyraRaw) : null;
 
+  // This catalog origin only has keyra_session after /api/keyra/session/continue.
+  // Without a SimSecure cookie, do not call auth.keyra.ie — it always returns
+  // unauthenticated and would erase the local session (redirect loop on localhost).
+  const hasSimsecureSession = Boolean(readCookie(cookieHeader, SIMSECURE_SESSION_COOKIE));
+  if (!hasSimsecureSession) {
+    return cookieUser;
+  }
+
   const backend =
     process.env.SIMSECURE_AUTH_BACKEND_URL?.trim() ||
     process.env.NEXT_PUBLIC_SIMSECURE_AUTH_BACKEND_URL?.trim();
@@ -91,7 +102,7 @@ async function resolveKeyraSessionFromCookieHeader(
     }
     const payload = (await res.json()) as AuthSessionPayload;
     if (payload.authenticated === false) {
-      return null;
+      return cookieUser;
     }
     const authUser = userFromAuthPayload(payload);
     if (!authUser) {
