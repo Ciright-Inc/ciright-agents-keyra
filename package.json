@@ -9,7 +9,8 @@
   "scripts": {
     "dev": "next dev -p 3040",
     "build": "prisma generate && next build",
-    "start": "next start -p ${PORT:-3040} -H 0.0.0.0",
+    "start": "node scripts/start-with-db.mjs",
+    "start:next": "next start -p ${PORT:-3040} -H 0.0.0.0",
     "lint": "next lint",
     "postinstall": "prisma generate",
     "deploy:db": "prisma db push && tsx prisma/seed.ts",
