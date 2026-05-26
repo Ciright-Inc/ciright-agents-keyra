@@ -4,4 +4,4 @@ NIXPACKS_NODE_VERSION = "22"
 NIXPACKS_INSTALL_DEV_DEPS = "true"
 
 [phases.build]
-cmds = ["npm run build"]
+cmds = ["npm run build", "node scripts/bootstrap-db.mjs || echo '[nixpacks] build-time DB bootstrap skipped or failed — will retry at start'"]
