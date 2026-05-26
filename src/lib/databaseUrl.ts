@@ -9,33 +9,36 @@
 
 const APP_SCHEMA = "ciright_agents_keyra";
 
-function rewriteSchema(url: string, schema: string): string {
-  if (url.includes("schema=")) {
-    return url.replace(/([?&])schema=[^&]*/, `$1schema=${schema}`);
-  }
-  return url + (url.includes("?") ? "&" : "?") + `schema=${schema}`;
+function isRailwayInternalHost(hostname: string): boolean {
+  return hostname.endsWith(".railway.internal");
 }
 
 export function normalizeDatabaseUrl(raw: string | undefined): string | undefined {
   const url = raw?.trim();
   if (!url) return undefined;
 
-  let out = rewriteSchema(url, APP_SCHEMA);
-
-  const needsSsl =
-    process.env.NODE_ENV === "production" &&
-    !out.includes("sslmode=") &&
-    !out.includes(".railway.internal") &&
-    (out.includes("railway") ||
-      out.includes("rlwy.net") ||
-      process.env.RAILWAY_ENVIRONMENT === "production" ||
-      process.env.RAILWAY_ENVIRONMENT === "true");
-
-  if (needsSsl) {
-    out += out.includes("?") ? "&sslmode=require" : "?sslmode=require";
+  try {
+    const u = new URL(url);
+    u.searchParams.set("schema", APP_SCHEMA);
+    if (isRailwayInternalHost(u.hostname)) {
+      u.searchParams.delete("sslmode");
+      u.searchParams.delete("ssl");
+      return u.toString();
+    }
+    const needsSsl =
+      process.env.NODE_ENV === "production" &&
+      !u.searchParams.has("sslmode") &&
+      (u.hostname.includes("railway") ||
+        u.hostname.includes("rlwy.net") ||
+        process.env.RAILWAY_ENVIRONMENT === "production" ||
+        process.env.RAILWAY_ENVIRONMENT === "true");
+    if (needsSsl) {
+      u.searchParams.set("sslmode", "require");
+    }
+    return u.toString();
+  } catch {
+    return url;
   }
-
-  return out;
 }
 
 export function resolveDatabaseUrl(): string | undefined {

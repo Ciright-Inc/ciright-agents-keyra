@@ -1,13 +1,13 @@
 #!/usr/bin/env node
 /**
- * Idempotent Postgres bootstrap: dedicated schema + prisma db push + seed.
+ * Idempotent Postgres bootstrap via Prisma only (no pg driver).
+ * Prisma handles schema= in DATABASE_URL; avoids SSL issues on railway.internal.
  */
 
 import { readFileSync, existsSync } from "node:fs";
 import { join } from "node:path";
 import { spawn } from "node:child_process";
 import { fileURLToPath } from "node:url";
-import { Client } from "pg";
 
 function loadEnvFile() {
   if (process.env.DATABASE_URL?.trim()) return;
@@ -31,82 +31,49 @@ function loadEnvFile() {
 }
 
 export const APP_SCHEMA = "ciright_agents_keyra";
-const VERIFY_TABLE = "KeyraAgentCatalog";
-
-export function rewriteSchema(url, schema) {
-  if (url.includes("schema=")) {
-    return url.replace(/([?&])schema=[^&]*/, `$1schema=${schema}`);
-  }
-  return url + (url.includes("?") ? "&" : "?") + `schema=${schema}`;
-}
 
 export function isRailwayInternalDb(url) {
-  return url.includes(".railway.internal");
+  try {
+    return new URL(url).hostname.endsWith(".railway.internal");
+  } catch {
+    return url.includes(".railway.internal");
+  }
 }
 
-/** Public proxy URLs need SSL; private Railway network does not. */
-export function ensureSsl(url) {
-  if (url.includes("sslmode=")) return url;
-  if (isRailwayInternalDb(url)) return url;
-  const onRailway =
-    url.includes("railway") ||
-    url.includes("rlwy.net") ||
-    process.env.RAILWAY_ENVIRONMENT === "production" ||
-    process.env.RAILWAY_ENVIRONMENT === "true";
-  if (!onRailway) return url;
-  return url + (url.includes("?") ? "&" : "?") + "sslmode=require";
-}
-
-export function pgConnectionUrl(url) {
+export function rewriteSchema(url, schema) {
   const u = new URL(url);
-  u.searchParams.delete("schema");
+  u.searchParams.set("schema", schema);
   return u.toString();
 }
 
-function run(cmd, args, env) {
+/** Scope to app schema; strip SSL on private Railway network (Prisma connects fine). */
+export function prepareDatabaseUrl(raw, schema = APP_SCHEMA) {
+  const u = new URL(raw.trim());
+  u.searchParams.set("schema", schema);
+  if (isRailwayInternalDb(u.toString())) {
+    u.searchParams.delete("sslmode");
+    u.searchParams.delete("ssl");
+    return u.toString();
+  }
+  if (!u.searchParams.has("sslmode")) {
+    const onRailway =
+      u.hostname.includes("railway") ||
+      u.hostname.includes("rlwy.net") ||
+      process.env.RAILWAY_ENVIRONMENT === "production" ||
+      process.env.RAILWAY_ENVIRONMENT === "true";
+    if (onRailway || process.env.NODE_ENV === "production") {
+      u.searchParams.set("sslmode", "require");
+    }
+  }
+  return u.toString();
+}
+
+function run(cmd, args) {
   return new Promise((resolve) => {
-    const child = spawn(cmd, args, { stdio: "inherit", env });
+    const child = spawn(cmd, args, { stdio: "inherit", env: process.env });
     child.on("close", (code) => resolve(code ?? 0));
     child.on("error", () => resolve(1));
   });
-}
-
-function pgClientOptions(connUrl) {
-  const u = new URL(pgConnectionUrl(connUrl));
-  u.searchParams.delete("sslmode");
-  const needsSsl =
-    !isRailwayInternalDb(connUrl) &&
-    (connUrl.includes("rlwy.net") || connUrl.includes("railway"));
-  return {
-    connectionString: u.toString(),
-    ssl: needsSsl ? { rejectUnauthorized: false } : false,
-  };
-}
-
-async function ensureSchema(connUrl, schema) {
-  const client = new Client(pgClientOptions(connUrl));
-  await client.connect();
-  try {
-    await client.query(`CREATE SCHEMA IF NOT EXISTS "${schema}";`);
-    console.log(`[bootstrap-db] ensured schema "${schema}" exists`);
-  } finally {
-    await client.end().catch(() => {});
-  }
-}
-
-async function tableExists(connUrl, schema, table) {
-  const client = new Client(pgClientOptions(connUrl));
-  await client.connect();
-  try {
-    const res = await client.query(
-      `SELECT 1 FROM information_schema.tables
-       WHERE table_schema = $1 AND table_name = $2 LIMIT 1`,
-      [schema, table],
-    );
-    return (res.rowCount ?? 0) > 0;
-  } finally {
-    await client.end().catch(() => {});
-  }
 }
 
 export async function bootstrapDatabase() {
@@ -117,18 +84,14 @@ export async function bootstrapDatabase() {
     return false;
   }
 
-  const scopedUrl = ensureSsl(rewriteSchema(raw, APP_SCHEMA));
+  const scopedUrl = prepareDatabaseUrl(raw, APP_SCHEMA);
   process.env.DATABASE_URL = scopedUrl;
-  console.log(`[bootstrap-db] using schema=${APP_SCHEMA}`);
+  console.log(
+    `[bootstrap-db] using schema=${APP_SCHEMA} host=${new URL(scopedUrl).hostname}`,
+  );
 
   for (let attempt = 1; attempt <= 3; attempt++) {
     console.log(`[bootstrap-db] attempt ${attempt}/3`);
-
-    try {
-      await ensureSchema(scopedUrl, APP_SCHEMA);
-    } catch (err) {
-      console.log(`[bootstrap-db] WARN: CREATE SCHEMA failed: ${err?.message ?? err}`);
-    }
 
     const pushCode = await run("npx", [
       "--no-install",
@@ -146,20 +109,10 @@ export async function bootstrapDatabase() {
 
     const seedCode = await run("npx", ["--no-install", "prisma", "db", "seed"]);
     if (seedCode !== 0) {
-      console.log(`[bootstrap-db] WARN: seed exited ${seedCode}`);
+      console.log(`[bootstrap-db] WARN: seed exited ${seedCode} (tables exist — continuing)`);
     }
 
-    try {
-      if (await tableExists(scopedUrl, APP_SCHEMA, VERIFY_TABLE)) {
-        console.log(`[bootstrap-db] OK — ${VERIFY_TABLE} table present`);
-        return true;
-      }
-    } catch (err) {
-      console.log(`[bootstrap-db] WARN: verify failed: ${err?.message ?? err}`);
-    }
-
-    // Prisma push succeeded — trust schema even if pg verify failed (e.g. SSL quirks).
-    console.log(`[bootstrap-db] OK — prisma db push succeeded`);
+    console.log("[bootstrap-db] OK");
     return true;
   }
 
