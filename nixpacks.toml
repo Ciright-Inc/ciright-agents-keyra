@@ -1,5 +1,7 @@
 [variables]
 NIXPACKS_NODE_VERSION = "22"
+# Railway sets NODE_ENV=production during install; still need devDeps for next build.
+NIXPACKS_INSTALL_DEV_DEPS = "true"
 
 [phases.build]
 cmds = ["npm run build"]
