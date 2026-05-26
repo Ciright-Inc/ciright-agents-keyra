@@ -461,7 +461,10 @@ async function main() {
   }
 
   console.log("• Seeding admin operators");
-  const devPhone = process.env.KEYRA_DEV_SESSION_PHONE?.trim() || "+353871234567";
+  const devPhone =
+    process.env.KEYRA_CATALOG_OPERATOR_PHONE?.trim() ||
+    process.env.KEYRA_DEV_SESSION_PHONE?.trim() ||
+    "+353871234567";
   await prisma.adminUser.upsert({
     where: { email: "ops@keyra.ie" },
     update: { phoneE164: devPhone, isActive: true },

@@ -5,6 +5,7 @@ import {
   resolveCatalogAccessState,
   resolveCatalogAuthFromCookies,
 } from "@/lib/catalogAuthContext";
+import { catalogSessionConfigError } from "@/lib/catalogSessionConfig";
 
 type Search = { next?: string; reason?: string };
 
@@ -22,14 +23,20 @@ async function CatalogLoginContent({ searchParams }: { searchParams: Promise<Sea
   const access = await resolveCatalogAccessState();
   if (access.status === "authorized") redirect(nextPath);
 
+  const configError = catalogSessionConfigError();
   const reason =
-    sp.reason === "no_access" || access.status === "no_access" ? "no_access" : "sign_in";
+    sp.reason === "config" || configError
+      ? "config"
+      : sp.reason === "no_access" || access.status === "no_access"
+        ? "no_access"
+        : "sign_in";
 
   return (
     <CatalogAccessGate
       reason={reason}
       phoneE164={access.status === "no_access" ? access.phoneE164 : undefined}
       nextPath={nextPath}
+      configError={configError}
     />
   );
 }

@@ -1,3 +1,8 @@
+import {
+  buildCatalogGetStartedAccessUrl,
+  buildKeyraSessionContinueUrl,
+} from "@/lib/catalogAppUrls";
+import { catalogSessionConfigError } from "@/lib/catalogSessionConfig";
 import { resolveCatalogRedirectOrigin } from "@/lib/catalogRedirectOrigin";
 import {
   devSessionPhoneFallback,
@@ -16,6 +21,14 @@ export async function GET(req: Request) {
   const nextPath = safeSessionContinueNext(url.searchParams.get("next"));
   const origin = resolveCatalogRedirectOrigin(req);
 
+  const configError = catalogSessionConfigError();
+  if (configError) {
+    const login = new URL("/login", origin);
+    login.searchParams.set("next", nextPath);
+    login.searchParams.set("reason", "config");
+    return NextResponse.redirect(login);
+  }
+
   const fromAuth = await resolveKeyraSessionUserFromAuth(req);
   if (fromAuth) {
     const res = redirectWithKeyraSession(fromAuth, nextPath, origin);
@@ -31,8 +44,8 @@ export async function GET(req: Request) {
     }
   }
 
-  const login = new URL("/login", origin);
-  login.searchParams.set("next", nextPath);
-  login.searchParams.set("reason", "sign_in");
-  return NextResponse.redirect(login);
+  // Not signed in — send straight to Keyra Get Started (return via this bridge).
+  return NextResponse.redirect(
+    buildCatalogGetStartedAccessUrl(buildKeyraSessionContinueUrl(nextPath)),
+  );
 }

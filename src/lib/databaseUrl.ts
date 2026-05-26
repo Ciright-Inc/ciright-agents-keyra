@@ -25,6 +25,7 @@ export function normalizeDatabaseUrl(raw: string | undefined): string | undefine
   const needsSsl =
     process.env.NODE_ENV === "production" &&
     !out.includes("sslmode=") &&
+    !out.includes(".railway.internal") &&
     (out.includes("railway") ||
       out.includes("rlwy.net") ||
       process.env.RAILWAY_ENVIRONMENT === "production" ||

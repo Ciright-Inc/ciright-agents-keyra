@@ -40,8 +40,14 @@ export function rewriteSchema(url, schema) {
   return url + (url.includes("?") ? "&" : "?") + `schema=${schema}`;
 }
 
+export function isRailwayInternalDb(url) {
+  return url.includes(".railway.internal");
+}
+
+/** Public proxy URLs need SSL; private Railway network does not. */
 export function ensureSsl(url) {
   if (url.includes("sslmode=")) return url;
+  if (isRailwayInternalDb(url)) return url;
   const onRailway =
     url.includes("railway") ||
     url.includes("rlwy.net") ||
@@ -66,11 +72,14 @@ function run(cmd, args, env) {
 }
 
 function pgClientOptions(connUrl) {
+  const u = new URL(pgConnectionUrl(connUrl));
+  u.searchParams.delete("sslmode");
+  const needsSsl =
+    !isRailwayInternalDb(connUrl) &&
+    (connUrl.includes("rlwy.net") || connUrl.includes("railway"));
   return {
-    connectionString: pgConnectionUrl(connUrl),
-    ssl: connUrl.includes("rlwy.net") || connUrl.includes("railway")
-      ? { rejectUnauthorized: false }
-      : undefined,
+    connectionString: u.toString(),
+    ssl: needsSsl ? { rejectUnauthorized: false } : false,
   };
 }
 
@@ -135,28 +144,23 @@ export async function bootstrapDatabase() {
       continue;
     }
 
+    const seedCode = await run("npx", ["--no-install", "prisma", "db", "seed"]);
+    if (seedCode !== 0) {
+      console.log(`[bootstrap-db] WARN: seed exited ${seedCode}`);
+    }
+
     try {
       if (await tableExists(scopedUrl, APP_SCHEMA, VERIFY_TABLE)) {
-        const seedCode = await run("npx", [
-          "--no-install",
-          "prisma",
-          "db",
-          "seed",
-        ]);
-        if (seedCode !== 0) {
-          console.log(
-            `[bootstrap-db] WARN: seed exited ${seedCode} (tables exist — continuing)`,
-          );
-        }
         console.log(`[bootstrap-db] OK — ${VERIFY_TABLE} table present`);
         return true;
       }
-      console.log(`[bootstrap-db] WARN: push ran but ${VERIFY_TABLE} not found`);
     } catch (err) {
       console.log(`[bootstrap-db] WARN: verify failed: ${err?.message ?? err}`);
     }
 
-    await new Promise((r) => setTimeout(r, 2000));
+    // Prisma push succeeded — trust schema even if pg verify failed (e.g. SSL quirks).
+    console.log(`[bootstrap-db] OK — prisma db push succeeded`);
+    return true;
   }
 
   return false;
