@@ -3,8 +3,7 @@
 # Repo must be this project root (package.json at /), branch main.
 
 [build]
-builder = "DOCKERFILE"
-dockerfilePath = "Dockerfile"
+builder = "nixpacks"
 
 [deploy]
 # Schema + seed run at start (build has no DB access). deploy:db is non-fatal
