@@ -6,7 +6,7 @@ generator client {
 }
 
 datasource db {
-  provider = "sqlite"
+  provider = "postgresql"
   url      = env("DATABASE_URL")
 }
 
@@ -29,7 +29,7 @@ model KeyraAgentCatalog {
   agent_type                String
   agent_description         String
 
-  // JSON-encoded arrays (SQLite has no native JSON for filter usage)
+  // JSON-encoded arrays (stored as text for simple filtering)
   agent_capabilities        String   @default("[]")
   required_inputs           String   @default("[]")
   expected_outputs          String   @default("[]")

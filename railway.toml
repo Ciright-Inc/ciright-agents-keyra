@@ -1,0 +1,13 @@
+# Railway — ciright.agents.keyra.ie (ciright-agents-keyra)
+# Link a Postgres plugin/service so DATABASE_URL is injected at runtime.
+
+[build]
+builder = "nixpacks"
+
+[deploy]
+# Schema + seed run at start (build has no DB access; avoids P1012 on SQLite vs Postgres URL).
+startCommand = "/bin/sh -c \"npm run deploy:db && exec npm run start\""
+healthcheckPath = "/"
+healthcheckTimeout = 300
+restartPolicyType = "ON_FAILURE"
+restartPolicyMaxRetries = 10
