@@ -461,20 +461,32 @@ async function main() {
   }
 
   console.log("• Seeding admin operators");
+  const devPhone = process.env.KEYRA_DEV_SESSION_PHONE?.trim() || "+353871234567";
   await prisma.adminUser.upsert({
     where: { email: "ops@keyra.ie" },
-    update: {},
-    create: { email: "ops@keyra.ie", name: "Keyra Operations", role: "admin" },
+    update: { phoneE164: devPhone, isActive: true },
+    create: {
+      email: "ops@keyra.ie",
+      phoneE164: devPhone,
+      name: "Keyra Operations",
+      role: "admin",
+      isActive: true,
+    },
   });
   await prisma.adminUser.upsert({
     where: { email: "review@keyra.ie" },
-    update: {},
-    create: { email: "review@keyra.ie", name: "Keyra Review", role: "reviewer" },
+    update: { isActive: true },
+    create: { email: "review@keyra.ie", name: "Keyra Review", role: "reviewer", isActive: true },
   });
   await prisma.adminUser.upsert({
     where: { email: "sovereign@keyra.ie" },
-    update: {},
-    create: { email: "sovereign@keyra.ie", name: "Sovereign Admin", role: "sovereign-admin" },
+    update: { isActive: true },
+    create: {
+      email: "sovereign@keyra.ie",
+      name: "Sovereign Admin",
+      role: "sovereign-admin",
+      isActive: true,
+    },
   });
 
   console.log("• Seeding initial audit event");

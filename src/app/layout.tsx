@@ -1,8 +1,8 @@
 import "./globals.css";
 import type { Metadata } from "next";
-import { Sidebar } from "@/components/Sidebar";
+import { CatalogAuthShell } from "@/components/CatalogAuthShell";
 
-const KEYRA_FAVICON_SRC = "/favicon.png";
+const KEYRA_FAVICON_SRC = "/favicon.svg";
 
 export const metadata: Metadata = {
   title: "ciright.agents.keyra.ie — Deployment Catalog",
@@ -26,12 +26,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         />
       </head>
       <body>
-        <div className="flex min-h-screen">
-          <Sidebar />
-          <main className="flex-1 min-w-0">
-            <div className="ds-content">{children}</div>
-          </main>
-        </div>
+        <CatalogAuthShell>{children}</CatalogAuthShell>
       </body>
     </html>
   );

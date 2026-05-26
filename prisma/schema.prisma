@@ -195,7 +195,9 @@ model AuditEvent {
 model AdminUser {
   id          String   @id @default(cuid())
   email       String   @unique
+  phoneE164   String?  @unique
   name        String
   role        String   @default("operator") // operator | reviewer | admin | sovereign-admin
+  isActive    Boolean  @default(true)
   created_at  DateTime @default(now())
 }
