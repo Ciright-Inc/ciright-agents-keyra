@@ -1,8 +1,10 @@
 # Railway — ciright.agents.keyra.ie (ciright-agents-keyra)
-# Link a Postgres plugin/service so DATABASE_URL is injected at runtime.
+# Requires Postgres: DATABASE_URL=${{Postgres.DATABASE_URL}}
+# Repo must be this project root (package.json at /), branch main.
 
 [build]
-builder = "nixpacks"
+builder = "DOCKERFILE"
+dockerfilePath = "Dockerfile"
 
 [deploy]
 # Schema + seed run at start (build has no DB access; avoids P1012 on SQLite vs Postgres URL).
