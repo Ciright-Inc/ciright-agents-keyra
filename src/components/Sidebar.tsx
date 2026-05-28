@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { useCallback, useEffect, useMemo, useState } from "react";
 
 type Item = { href: string; label: string; icon: string };
 type Group = { label: string; items: Item[] };
@@ -45,6 +46,30 @@ const groups: Group[] = [
 
 export function Sidebar() {
   const pathname = usePathname() || "/";
+  const [sessionUser, setSessionUser] = useState<{ phoneE164: string } | null | undefined>(undefined);
+
+  const refreshSession = useCallback(async () => {
+    try {
+      const res = await fetch("/api/keyra/session/me", { method: "GET", cache: "no-store" });
+      if (!res.ok) {
+        setSessionUser(null);
+        return;
+      }
+      const json = (await res.json()) as { user: { phoneE164: string } | null };
+      setSessionUser(json.user ?? null);
+    } catch {
+      setSessionUser(null);
+    }
+  }, []);
+
+  useEffect(() => {
+    void refreshSession();
+  }, [refreshSession]);
+
+  const authAction = useMemo(() => {
+    if (sessionUser === undefined) return "loading" as const;
+    return sessionUser ? ("logout" as const) : ("login" as const);
+  }, [sessionUser]);
 
   return (
     <aside className="ds-sidebar" aria-label="Catalog navigation">
@@ -89,6 +114,33 @@ export function Sidebar() {
           </span>
           <span className="ds-sidebar-chip">v0.1.0</span>
         </div>
+
+        {authAction === "loading" ? null : authAction === "login" ? (
+          <Link href="/login?next=/" className="ds-sidebar-row mt-3">
+            <span className="material-symbols-outlined" aria-hidden>
+              login
+            </span>
+            <span className="ds-sidebar-row__label">Login</span>
+          </Link>
+        ) : (
+          <button
+            type="button"
+            className="ds-sidebar-row mt-3"
+            onClick={async () => {
+              try {
+                await fetch("/api/keyra/session/logout", { method: "POST" });
+              } finally {
+                setSessionUser(null);
+                window.location.href = "/login";
+              }
+            }}
+          >
+            <span className="material-symbols-outlined" aria-hidden>
+              logout
+            </span>
+            <span className="ds-sidebar-row__label">Logout</span>
+          </button>
+        )}
       </div>
     </aside>
   );
